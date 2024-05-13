@@ -9,13 +9,16 @@ import asyncio
 from urllib.parse import unquote
 from phonenumbers import is_valid_number as valid_number, parse as pp
 from colorama import *
-from dotenv import load_dotenv
-
 from discord_webhook import DiscordWebhook, DiscordEmbed
 from datetime import datetime
 import pytz
 
-load_dotenv()
+
+with open('.env') as f:
+    for line in f:
+        if line.strip() and not line.startswith('#'):
+            key, value = line.strip().split('=', 1)
+            os.environ[key] = value
 
 api_id = os.getenv("API_ID")
 api_hash = os.getenv("API_HASH")
