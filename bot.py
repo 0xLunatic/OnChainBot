@@ -4,10 +4,9 @@ import json
 import time
 import requests
 import random
+import aiohttp
+import asyncio
 from urllib.parse import unquote
-from telethon import TelegramClient, sync, events
-from telethon.tl.functions.messages import RequestWebViewRequest
-from telethon.errors import SessionPasswordNeededError
 from phonenumbers import is_valid_number as valid_number, parse as pp
 from colorama import *
 from dotenv import load_dotenv
@@ -61,7 +60,7 @@ class OnchainBot:
             time.sleep(1)
         print("                          ", flush=True, end="\r")
 
-    def login(self, phone):
+    async def login(self, phone):
         session_folder = "session"
 
         if not os.path.exists(session_folder):
@@ -71,50 +70,35 @@ class OnchainBot:
             self.log(f"{merah}phone number invalid !")
             sys.exit()
 
-        client = TelegramClient(
-            f"{session_folder}/{phone}", api_id=api_id, api_hash=api_hash
-        )
-        client.connect()
-        if not client.is_user_authorized():
-            try:
-                client.send_code_request(phone)
-                code = input(f"{putih}input login code : ")
-                client.sign_in(phone=phone, code=code)
-            except SessionPasswordNeededError:
-                pw2fa = input(f"{putih}input password 2fa : ")
-                client.sign_in(phone=phone, password=pw2fa)
+        async with aiohttp.ClientSession() as session:
+            async with session.get(f"https://my.telegram.org/auth/send_password?phone={phone}") as response:
+                if response.status != 200:
+                    self.log("Failed to send code.")
+                    return
 
-        me = client.get_me()
-        first_name = me.first_name
-        last_name = me.last_name
-        username = me.username
-        self.log(f"{putih}Login as {hijau}{first_name} {last_name}")
-        res = client(
-            RequestWebViewRequest(
-                peer=self.peer,
-                bot=self.peer,
-                platform="Android",
-                url="https://db4.onchaincoin.io/",
-                from_bot_menu=False,
-            )
-        )
-        self.tg_data = unquote(res.url.split("#tgWebAppData=")[1]).split(
-            "&tgWebAppVersion="
-        )[0]
-        # print(self.tg_data)
-        return self.tg_data
+                html = await response.text()
+                self.log("Enter the code you received.")
+                code = input("Code: ")
+                async with session.get(f"https://my.telegram.org/auth/login?phone={phone}&password={code}") as login_response:
+                    if login_response.status != 200:
+                        self.log("Login failed.")
+                        return
+
+                    self.log("Successfully logged in.")
+                    return
 
     def get_info(self):
         _url = "https://db4.onchaincoin.io/api/info"
         _headers = {
-            "user-agent": "Mozilla/5.0 (Linux; Android 11; SAMSUNG SM-G973U) AppleWebKit/537.36 (KHTML, like Gecko) SamsungBrowser/14.2 Chrome/87.0.4280.141 Mobile Safari/537.36",
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+            'sec-ch-ua': '"Chromium";v="124", "Google Chrome";v="124", "Not-A.Brand";v="99"',
             "accept": "application/json, text/plain, */*",
             "accept-language": "en-US,en;q=0.5",
             "authorization": f"Bearer {self.bearer}",
             "referer": "https://db4.onchaincoin.io/",
-            "sec-fetch-dest": "empty",
-            "sec-fetch-mode": "cors",
-            "sec-fetch-site": "same-origin",
+            'Sec-Fetch-Dest': 'empty',
+            'Sec-Fetch-Mode': 'cors',
+            'Sec-Fetch-Site': 'same-site',
             "te": "trailers",
             "content-length": "0",
         }
@@ -203,21 +187,20 @@ class OnchainBot:
                 self.log(f"{hijau}remaining energy : {putih}{energy}")
                 if click >= 1:
                     if os.getenv("DISCORD_WEBHOOK"):
-                            # Specify the Jakarta timezone
+                        # Specify the Jakarta timezone
                         jakarta_timezone = pytz.timezone('Asia/Jakarta')
 
-                            # Convert UTC time to Jakarta time
+                        # Convert UTC time to Jakarta time
                         now_jakarta = datetime.now(jakarta_timezone)
 
-                            # Format the date and time as desired
+                        # Format the date and time as desired
                         formatted_date_time = now_jakarta.strftime("%d/%m/%Y %H:%M:%S")
 
-
                         webhook = DiscordWebhook(url=os.getenv("DISCORD_WEBHOOK"))
-                            # you can set the color as a decimal (color=242424) or hex (color="03b2f8") number
+                        # you can set the color as a decimal (color=242424) or hex (color="03b2f8") number
                         embed = DiscordEmbed(title=f"Successfully Tapped!", description=f"**Balance:** {coins}\n **Taps:** +*{click}*\n\n **Total Taps:** {clicks}\n\n **DATE :** {formatted_date_time}", color="03b2f8")
 
-                            # add embed object to webhook
+                        # add embed object to webhook
                         webhook.add_embed(embed)
 
                         webhook.execute()
@@ -233,9 +216,9 @@ class OnchainBot:
                 continue
 
             except (
-                requests.exceptions.ReadTimeout,
-                requests.exceptions.ConnectionError,
-                requests.exceptions.ConnectTimeout,
+                    requests.exceptions.ReadTimeout,
+                    requests.exceptions.ConnectionError,
+                    requests.exceptions.ConnectTimeout,
             ) as e:
                 self.log(f"{merah} {e}")
                 self.countdown(3)
@@ -243,20 +226,20 @@ class OnchainBot:
 
     def main(self):
         banner = f"""
-    {hijau}Auto tap-tap @onchaincoin_bot
+        {hijau}Auto tap-tap @onchaincoin_bot
     
-    {biru}By t.me/rmndkyl
-    github : @rmndkyl
-    Recoded by : @0xLunatic{reset}
+        {biru}By t.me/rmndkyl
+        github : @rmndkyl
+        Recoded by : @0xLunatic{reset}
         """
         os.system('cls' if os.name == 'nt' else 'clear')
-        print(banner) 
+        print(banner)
 
         if not os.path.exists("tg_data"):
             print(f"{putih}example input : +628169696969")
             phone = input(f"{hijau}input telegram phone number : {putih}")
             print()
-            data = self.login(phone)
+            data = asyncio.run(self.login(phone))
             open("tg_data", "w").write(data)
 
         tg_data = open("tg_data", "r").read()
