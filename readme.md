@@ -23,20 +23,22 @@ Auto tap-tap for onchaincoin_bot telegram.
 
 1. Make sure your machine ha s python and git installed. If not, search on google how to install it.
 2. Clone this repository
-3. Move to onchenbot directory
+4. Move to onchenbot directory
    ```
    cd OnChainBot
+   python3 -m venv venv
+   source venv/bin/activate
    ```
-4. Install library / module.
+5. Install library / module.
    ```
    pip install -r requirements.txt
    ```
-5. Copy enviroment and set it
+6. Copy enviroment and set it
    ```
    cp .env-example .env
    nano .env
    ```
-6. Run the program
+7. Run the program
    ```
    python bot.py
    ```
