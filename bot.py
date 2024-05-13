@@ -9,21 +9,29 @@ from telethon import TelegramClient, sync, events
 from telethon.tl.functions.messages import RequestWebViewRequest
 from telethon.errors import SessionPasswordNeededError
 from phonenumbers import is_valid_number as valid_number, parse as pp
-
+from colorama import *
 from dotenv import load_dotenv
+
+from discord_webhook import DiscordWebhook, DiscordEmbed
+from datetime import datetime
+import pytz
 
 load_dotenv()
 
 api_id = os.getenv("API_ID")
 api_hash = os.getenv("API_HASH")
 
-merah = "\033[91m"
-putih = "\033[97m"
-hijau = "\033[92m"
-biru = "\033[94m"
-reset = "\033[0m"
+init(autoreset=True)
+
+merah = Fore.LIGHTRED_EX
+putih = Fore.LIGHTWHITE_EX
+hijau = Fore.LIGHTGREEN_EX
+kuning = Fore.LIGHTYELLOW_EX
+biru = Fore.LIGHTBLUE_EX
+reset = Style.RESET_ALL
 
 peer = "onchaincoin_bot"
+
 
 class OnchainBot:
     def __init__(self):
@@ -34,14 +42,24 @@ class OnchainBot:
         self.api_hash = api_hash
 
     def log(self, message):
-        print(f"{biru}[{time.strftime('%Y-%m-%d %H:%M:%S')}] {message}{reset}")
+        year, mon, day, hour, minute, second, a, b, c = time.localtime()
+        mon = str(mon).zfill(2)
+        hour = str(hour).zfill(2)
+        minute = str(minute).zfill(2)
+        second = str(second).zfill(2)
+        print(f"{biru}[{year}-{mon}-{day} {hour}:{minute}:{second}] {message}")
 
     def countdown(self, t):
         while t:
-            print(f"waiting for {t} seconds ", end="\r")
+            menit, detik = divmod(t, 60)
+            jam, menit = divmod(menit, 60)
+            jam = str(jam).zfill(2)
+            menit = str(menit).zfill(2)
+            detik = str(detik).zfill(2)
+            print(f"waiting until {jam}:{menit}:{detik} ", flush=True, end="\r")
             t -= 1
             time.sleep(1)
-        print(" " * 30, end="\r")
+        print("                          ", flush=True, end="\r")
 
     def login(self, phone):
         session_folder = "session"
@@ -83,19 +101,21 @@ class OnchainBot:
         self.tg_data = unquote(res.url.split("#tgWebAppData=")[1]).split(
             "&tgWebAppVersion="
         )[0]
+        # print(self.tg_data)
         return self.tg_data
 
     def get_info(self):
         _url = "https://db4.onchaincoin.io/api/info"
         _headers = {
-            "user-agent": "Mozilla/5.0 (Linux; Android 11; SAMSUNG SM-G973U) AppleWebKit/537.36 (KHTML, like Gecko) SamsungBrowser/14.2 Chrome/87.0.4280.141 Mobile Safari/537.36",
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+            'sec-ch-ua': '"Chromium";v="124", "Google Chrome";v="124", "Not-A.Brand";v="99"',
             "accept": "application/json, text/plain, */*",
             "accept-language": "en-US,en;q=0.5",
             "authorization": f"Bearer {self.bearer}",
             "referer": "https://db4.onchaincoin.io/",
-            "sec-fetch-dest": "empty",
-            "sec-fetch-mode": "cors",
-            "sec-fetch-site": "same-origin",
+            'Sec-Fetch-Dest': 'empty',
+            'Sec-Fetch-Mode': 'cors',
+            'Sec-Fetch-Site': 'same-site',
             "te": "trailers",
             "content-length": "0",
         }
@@ -104,11 +124,16 @@ class OnchainBot:
             if "Invalid token" in res.text:
                 return "need_reauth"
 
-        data = res.json()["user"]
-        self.log(f"{hijau}full name : {putih}:{data.get('fullName')}")
-        self.log(f"{putih}total coins : {hijau}{data.get('coins')}")
-        self.log(f"{putih}total clicks : {hijau}{data.get('clicks')}")
-        self.log(f"{putih}total energy : {hijau}{data.get('energy')}")
+        name = res.json()["user"]["fullName"]
+        energy = res.json()["user"]["energy"]
+        max_energy = res.json()["user"]["maxEnergy"]
+        league = res.json()["user"]["league"]
+        clicks = res.json()["user"]["clicks"]
+        coins = res.json()["user"]["coins"]
+        self.log(f"{hijau}full name : {putih}:{name}")
+        self.log(f"{putih}total coins : {hijau}{coins}")
+        self.log(f"{putih}total clicks : {hijau}{clicks}")
+        self.log(f"{putih}total energy : {hijau}{energy}")
         print("~" * 50)
 
     def on_login(self):
@@ -128,7 +153,12 @@ class OnchainBot:
             "te": "trailers",
         }
         res = requests.post(_url, json=_data, headers=_headers, timeout=100)
-        if res.status_code != 200 or not res.json().get("success"):
+        if res.status_code != 200:
+            print(res.text)
+            sys.exit()
+
+        if res.json()["success"] is False:
+            print(res.text)
             sys.exit()
 
         self.bearer = res.json()["token"]
@@ -165,17 +195,37 @@ class OnchainBot:
                     self.countdown(self.sleep)
                     continue
 
-                data = res.json()
+                clicks = res.json()["clicks"]
+                coins = res.json()["coins"]
+                energy = res.json()["energy"]
                 self.log(f"{hijau}click : {putih}{click}")
-                self.log(f"{hijau}total clicks : {putih}{data.get('clicks')}")
-                self.log(f"{hijau}total coins : {putih}{data.get('coins')}")
-                self.log(f"{hijau}remaining energy : {putih}{data.get('energy')}")
+                self.log(f"{hijau}total clicks : {putih}{clicks}")
+                self.log(f"{hijau}total coins : {putih}{coins}")
+                self.log(f"{hijau}remaining energy : {putih}{energy}")
+                if click >= 1:
+                    if os.getenv("DISCORD_WEBHOOK"):
+                            # Specify the Jakarta timezone
+                        jakarta_timezone = pytz.timezone('Asia/Jakarta')
 
-                if click >= 1 and os.getenv("DISCORD_WEBHOOK"):
-                    # Notify via Discord webhook
-                    self.notify_discord(data)
+                            # Convert UTC time to Jakarta time
+                        now_jakarta = datetime.now(jakarta_timezone)
 
-                if int(data.get("energy", 0)) < int(self.min_energy):
+                            # Format the date and time as desired
+                        formatted_date_time = now_jakarta.strftime("%d/%m/%Y %H:%M:%S")
+
+
+                        webhook = DiscordWebhook(url=os.getenv("DISCORD_WEBHOOK"))
+                            # you can set the color as a decimal (color=242424) or hex (color="03b2f8") number
+                        embed = DiscordEmbed(title=f"Successfully Tapped!", description=f"**Balance:** {coins}\n **Taps:** +*{click}*\n\n **Total Taps:** {clicks}\n\n **DATE :** {formatted_date_time}", color="03b2f8")
+
+                            # add embed object to webhook
+                        webhook.add_embed(embed)
+
+                        webhook.execute()
+                    else:
+                        self.log(f"Discord Webhook is not set!")
+
+                if int(energy) < int(self.min_energy):
                     self.countdown(self.sleep)
                     continue
 
@@ -183,20 +233,14 @@ class OnchainBot:
                 self.countdown(self.interval)
                 continue
 
-            except (requests.exceptions.RequestException, KeyboardInterrupt):
-                sys.exit()
-
-    def notify_discord(self, data):
-        jakarta_timezone = pytz.timezone('Asia/Jakarta')
-        now_jakarta = datetime.now(jakarta_timezone)
-        formatted_date_time = now_jakarta.strftime("%d/%m/%Y %H:%M:%S")
-
-        webhook = DiscordWebhook(url=os.getenv("DISCORD_WEBHOOK"))
-        embed = DiscordEmbed(title="Successfully Tapped!",
-                             description=f"**Balance:** {data.get('coins')}\n **Taps:** +*{data.get('clicks')}*\n\n **Total Taps:** {data.get('clicks')}\n\n **DATE :** {formatted_date_time}",
-                             color="03b2f8")
-        webhook.add_embed(embed)
-        webhook.execute()
+            except (
+                requests.exceptions.ReadTimeout,
+                requests.exceptions.ConnectionError,
+                requests.exceptions.ConnectTimeout,
+            ) as e:
+                self.log(f"{merah} {e}")
+                self.countdown(3)
+                continue
 
     def main(self):
         banner = f"""
