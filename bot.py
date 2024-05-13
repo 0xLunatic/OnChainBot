@@ -88,7 +88,7 @@ class OnchainBot:
                         return
 
                     self.log("Successfully logged in.")
-                    return
+                    return html
 
     def get_info(self):
         _url = "https://db4.onchaincoin.io/api/info"
