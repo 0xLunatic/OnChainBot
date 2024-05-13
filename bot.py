@@ -12,6 +12,10 @@ from phonenumbers import is_valid_number as valid_number, parse as pp
 from colorama import *
 from dotenv import load_dotenv
 
+from discord_webhook import DiscordWebhook, DiscordEmbed
+from datetime import datetime
+import pytz
+
 load_dotenv()
 
 api_id = os.getenv("API_ID")
@@ -197,6 +201,29 @@ class OnchainBot:
                 self.log(f"{hijau}total clicks : {putih}{clicks}")
                 self.log(f"{hijau}total coins : {putih}{coins}")
                 self.log(f"{hijau}remaining energy : {putih}{energy}")
+                if click >= 1:
+                    if os.getenv("DISCORD_WEBHOOK"):
+                            # Specify the Jakarta timezone
+                        jakarta_timezone = pytz.timezone('Asia/Jakarta')
+
+                            # Convert UTC time to Jakarta time
+                        now_jakarta = datetime.now(jakarta_timezone)
+
+                            # Format the date and time as desired
+                        formatted_date_time = now_jakarta.strftime("%d/%m/%Y %H:%M:%S")
+
+
+                        webhook = DiscordWebhook(url=os.getenv("DISCORD_WEBHOOK"))
+                            # you can set the color as a decimal (color=242424) or hex (color="03b2f8") number
+                        embed = DiscordEmbed(title=f"Successfully Tapped!", description=f"**Balance:** {coins}\n **Taps:** +*{click}*\n\n **Total Taps:** {clicks}\n\n **DATE :** {formatted_date_time}", color="03b2f8")
+
+                            # add embed object to webhook
+                        webhook.add_embed(embed)
+
+                        webhook.execute()
+                    else:
+                        self.log(f"Discord Webhook is not set!")
+
                 if int(energy) < int(self.min_energy):
                     self.countdown(self.sleep)
                     continue
